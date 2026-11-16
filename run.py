@@ -39,16 +39,21 @@ def load_cfg():
 
 def once(cfg, db, no_captions=False):
     monitor.discover(cfg, db)
-    for vod in db.pending(cfg["run"].get("max_vods_per_run", 3)):
+    limit, done = cfg["run"].get("max_vods_per_run", 3), 0
+    for vod in db.pending(50):
+        if done >= limit:
+            break
         try:
             res = pipeline.process(vod, cfg, transcribe=not no_captions)
             if res == "live":
                 logging.info("[%s] still live, will retry later", vod["streamer"])
-                continue
+                continue  # doesn't count toward the limit
+            done += 1
             db.set_status(vod["key"], "done")
             logging.info("[%s] done: %d clips", vod["streamer"], len(res))
         except Exception as e:
-            logging.exception("[%s] failed: %s", vod["streamer"], vod["url"])
+            done += 1
+            logging.error("[%s] failed: %s -> %s", vod["streamer"], vod["url"], e)
             db.set_status(vod["key"], "failed", str(e)[:500])
 
 
