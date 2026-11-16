@@ -42,7 +42,7 @@ class DB:
     def pending(self, limit):
         return [dict(r) for r in self.conn.execute(
             "SELECT * FROM vods WHERE status='pending' OR (status='failed' AND attempts<3)"
-            " ORDER BY found_at DESC LIMIT ?", (limit,))]
+            " ORDER BY CASE platform WHEN 'youtube' THEN 1 ELSE 0 END, found_at DESC LIMIT ?", (limit,))]
 
     def set_status(self, key, status, error=None):
         self.conn.execute(

@@ -7,9 +7,14 @@ import yt_dlp
 log = logging.getLogger("monitor")
 
 
+COOKIES = None  # set by discover() from config
+
+
 def _flat(url, limit=10):
     opts = {"quiet": True, "no_warnings": True, "extract_flat": "in_playlist",
             "playlistend": limit, "skip_download": True}
+    if COOKIES:
+        opts["cookiefile"] = COOKIES
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     return [e for e in (info or {}).get("entries") or [] if e]
@@ -104,6 +109,10 @@ def passes_filters(vod, filters):
 
 def discover(cfg, db, dry_run=False):
     """Check every streamer on every platform; queue new VODs. Returns list of new VODs."""
+    global COOKIES
+    import os
+    ck = cfg.get("run", {}).get("cookies_file")
+    COOKIES = ck if ck and os.path.exists(ck) else None
     filters = cfg.get("filters", {})
     backfill = filters.get("backfill_per_channel", 1)
     new = []

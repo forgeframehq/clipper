@@ -13,11 +13,21 @@ from . import edit, highlights
 
 log = logging.getLogger("pipeline")
 PAD = 4  # extra seconds downloaded around each section (cuts land on keyframes)
+EXTRA = []  # extra yt-dlp args (e.g. --cookies), set from config in process()
+
+
+class YtdlpError(subprocess.CalledProcessError):
+    def __str__(self):
+        lines = [l for l in (self.stderr or "").splitlines() if l.strip()]
+        return "yt-dlp: " + (" | ".join(lines[-3:]) or f"exit {self.returncode}")
 
 
 def ytdlp(*args):
-    cmd = [sys.executable, "-m", "yt_dlp", "--no-warnings", "--no-progress", *args]
-    return subprocess.run(cmd, check=True, capture_output=True, text=True)
+    cmd = [sys.executable, "-m", "yt_dlp", "--no-warnings", "--no-progress", *EXTRA, *args]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode:
+        raise YtdlpError(r.returncode, cmd, r.stdout, r.stderr)
+    return r
 
 
 def info(url):
@@ -31,7 +41,7 @@ def _first_working(urls, fn):
             return fn(u)
         except subprocess.CalledProcessError as e:
             err = e
-            log.warning("yt-dlp failed on %s: %s", u, (e.stderr or "")[-300:])
+            log.warning("failed on %s -> %s", u, e)
     raise err or RuntimeError("no URL to try")
 
 
@@ -70,11 +80,16 @@ def process(vod, cfg, transcribe=True):
     os.makedirs(work, exist_ok=True)
     os.makedirs(out_dir, exist_ok=True)
     urls = [vod["url"], vod.get("alt_url")]
+    cookies = run.get("cookies_file")
+    EXTRA[:] = ["--cookies", cookies] if cookies and os.path.exists(cookies) else []
     try:
         if vod["platform"] in ("twitch", "youtube"):
-            meta = info(vod["url"])
-            if meta.get("live_status") == "is_live" or meta.get("is_live"):
-                return "live"
+            try:
+                meta = info(vod["url"])
+                if meta.get("live_status") == "is_live" or meta.get("is_live"):
+                    return "live"
+            except YtdlpError as e:
+                log.warning("could not read video info (%s); trying the download anyway", e)
         log.info("[%s] downloading audio: %s", vod["streamer"], vod["title"][:70])
         pcm_path = download_audio(urls, work)
         pcm = highlights.load_pcm(pcm_path)

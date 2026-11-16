@@ -59,3 +59,6 @@ run:
   work_dir: work
   max_vods_per_run: 3
   keep_temp: false
+  # YouTube often blocks server IPs ("sign in to confirm you're not a bot").
+  # Fix: export YouTube cookies from a browser to cookies.txt in this folder.
+  cookies_file: cookies.txt
