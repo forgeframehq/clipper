@@ -1,0 +1,12 @@
+[Unit]
+Description=Clipper - check streamers and clip new VODs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/venv/bin/python __DIR__/run.py once
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Nice=10
+TimeoutStartSec=6h

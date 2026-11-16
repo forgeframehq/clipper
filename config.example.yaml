@@ -1,0 +1,61 @@
+# Clipper config. install.sh copies this to config.yaml - edit config.yaml, not this file.
+#
+# Only clip streamers who run a clipping campaign (Whop Content Rewards, their Discord)
+# or who have given permission. Otherwise expect copyright strikes.
+# Check handles with:  python run.py check
+
+streamers:
+  - name: Adin Ross
+    kick: adinross
+  - name: xQc
+    kick: xqc
+    twitch: xqc
+  - name: N3on
+    kick: n3on
+  - name: Kai Cenat
+    twitch: kaicenat
+  - name: Jynxzi
+    twitch: jynxzi
+  - name: IShowSpeed
+    youtube: "@IShowSpeed"
+
+filters:
+  # Only VODs whose title contains one of these (case-insensitive). Empty = every VOD.
+  # From GTA 6 launch day set it to: ["gta", "grand theft auto"]
+  title_keywords: []
+  min_duration_min: 20      # skip short videos
+  max_age_hours: 72         # skip old VODs
+  backfill_per_channel: 1   # first time a channel is seen, only take its newest N VODs
+
+highlights:
+  clips_per_vod: 5
+  clip_before: 25           # seconds kept before the loudest moment (the setup)
+  clip_after: 15            # seconds kept after it (the reaction)
+  min_gap: 90               # seconds between two clips from the same VOD
+  candidates_multiplier: 3  # transcribe 3x more candidates than we keep, then pick the best
+  hype_words: ["no way", "oh my god", "omg", "bro", "what", "let's go", "lets go", "yo",
+               "stop", "crazy", "insane", "help", "run", "chat", "dude", "holy",
+               "wait", "hell no", "nah", "why", "dead", "clip that", "clip it"]
+
+transcribe:
+  model: small              # tiny | base | small | medium  (small = best for a 4-core CPU)
+  compute_type: int8
+  threads: 4
+  language: en
+
+edit:
+  layout: blur              # blur = full frame over blurred background | crop = centre crop
+  zoom: 1.35                # how much to zoom the gameplay in "blur" layout
+  caption_words: 3          # words per caption on screen
+  font: DejaVu Sans
+  font_size: 80
+  show_credit: true         # streamer name at the top (most campaigns require credit)
+  crf: 21
+  preset: veryfast
+  max_height: 1080          # source quality to download
+
+run:
+  output_dir: output
+  work_dir: work
+  max_vods_per_run: 3
+  keep_temp: false
