@@ -24,6 +24,7 @@ filters:
   # From GTA 6 launch day set it to: ["gta", "grand theft auto"]
   title_keywords: []
   min_duration_min: 20      # skip short videos
+  max_duration_min: 360     # skip marathon streams over 6 h (slow to process)
   max_age_hours: 72         # skip old VODs
   backfill_per_channel: 1   # first time a channel is seen, only take its newest N VODs
 

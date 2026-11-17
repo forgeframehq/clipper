@@ -63,6 +63,33 @@ def candidates(db, hl):
             for p, e in picked]
 
 
+def section_audio(path, secs=20):
+    """First `secs` seconds of a downloaded file as 16 kHz mono float."""
+    import subprocess
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-t", str(secs), "-vn", "-ac", "1",
+                          "-ar", str(SR), "-f", "s16le", "-"], capture_output=True, check=True).stdout
+    return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+
+def align(pcm, path, approx_start, search=25):
+    """Find where a downloaded section really starts inside the full VOD audio.
+    HLS sections begin on segment boundaries (2-10 s off), so we match audio."""
+    probe = section_audio(path)
+    if len(probe) < SR * 2:
+        return approx_start, 0.0
+    lo = max(0.0, approx_start - search)
+    ref = pcm[int(lo * SR):int((approx_start + search) * SR) + len(probe)].astype(np.float32) / 32768.0
+    if len(ref) <= len(probe):
+        return approx_start, 0.0
+    n = 1 << int(np.ceil(np.log2(len(ref) + len(probe))))
+    corr = np.fft.irfft(np.fft.rfft(ref, n) * np.conj(np.fft.rfft(probe, n)), n)[:len(ref) - len(probe) + 1]
+    e = np.concatenate([[0.0], np.cumsum(ref.astype(np.float64) ** 2)])
+    seg_norm = np.sqrt(e[len(probe):] - e[:-len(probe)]) + 1e-9
+    ncc = corr / (seg_norm * (np.linalg.norm(probe) + 1e-9))
+    lag = int(np.argmax(ncc))
+    return lo + lag / SR, float(ncc[lag])
+
+
 def get_model(tcfg):
     global _model
     if _model is None:

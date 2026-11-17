@@ -94,11 +94,15 @@ def process(vod, cfg, transcribe=True):
         pcm_path = download_audio(urls, work)
         pcm = highlights.load_pcm(pcm_path)
         moments = highlights.find(pcm, cfg, transcribe=transcribe)
-        del pcm
         made = []
         for n, m in enumerate(moments, 1):
             base = os.path.join(work, f"sec{n}")
             src, offset = download_section(urls, m["start"], m["end"], base, cfg["edit"].get("max_height", 1080))
+            real_start, conf = highlights.align(pcm, src, m["start"] - offset)
+            if conf > 0.5:
+                offset = m["start"] - real_start
+            else:
+                log.warning("  could not align clip %d audio (match %.2f); captions may drift", n, conf)
             name = f"{slug(vod['streamer'])}_{key_safe[-12:]}_{n}"
             out = os.path.join(out_dir, name + ".mp4")
             dur = m["end"] - m["start"]
@@ -107,6 +111,7 @@ def process(vod, cfg, transcribe=True):
             write_post_notes(out, vod, m)
             made.append(out)
             log.info("  clip %d/%d -> %s (score %.2f)", n, len(moments), out, m["score"])
+        del pcm
         return made
     finally:
         if not run.get("keep_temp"):

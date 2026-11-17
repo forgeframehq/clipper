@@ -100,6 +100,9 @@ def passes_filters(vod, filters):
     dur = vod.get("duration")
     if dur and dur < filters.get("min_duration_min", 0) * 60:
         return False, "too short"
+    max_min = filters.get("max_duration_min")
+    if dur and max_min and dur > max_min * 60:
+        return False, "too long"
     ts = vod.get("timestamp")
     max_age = filters.get("max_age_hours")
     if ts and max_age and (datetime.now(timezone.utc).timestamp() - ts) > max_age * 3600:
