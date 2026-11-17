@@ -32,52 +32,79 @@ def _get(url, **kw):
 
 
 # ---------------------------------------------------------------- Kick
+def _kick_videos(slug):
+    vids = _get(f"https://kick.com/api/v2/channels/{slug}/videos", impersonate="chrome")
+    return vids if isinstance(vids, list) else vids.get("data", [])
+
+
+def kick_latest(url):
+    """kick.com/<slug> (no video id) -> URL of that channel's newest finished VOD."""
+    m = re.fullmatch(r"https?://(?:www\.)?kick\.com/([\w-]+)/?", url.strip())
+    if not m:
+        return url
+    slug = m.group(1)
+    for v in _kick_videos(slug):
+        uuid = (v.get("video") or {}).get("uuid")
+        if uuid and not v.get("is_live"):
+            return f"https://kick.com/{slug}/videos/{uuid}"
+    return url
+
+
+def _kick_offset(c, start, dur):
+    v = c.get("vod_starts_at")
+    if isinstance(v, (int, float)) or (isinstance(v, str) and re.fullmatch(r"\d+(\.\d+)?", v)):
+        off = float(v)
+        return off / 1000 if off > dur * 5 else off
+    t = _ts(v) if isinstance(v, str) else None
+    if t and t > 0 and start:
+        return t - start
+    made = _ts(c.get("created_at"))
+    if made and start:
+        return made - float(c.get("duration") or 30) - start
+    return None
+
+
 def kick_clips(url):
     m = re.search(r"kick\.com/([\w-]+)/videos?/([0-9a-f-]{36})", url)
     if not m:
         return []
     slug, uuid = m.groups()
-    vids = _get(f"https://kick.com/api/v2/channels/{slug}/videos", impersonate="chrome")
-    vids = vids if isinstance(vids, list) else vids.get("data", [])
-    item = next((v for v in vids if (v.get("video") or {}).get("uuid") == uuid or v.get("uuid") == uuid), None)
+    item = next((v for v in _kick_videos(slug)
+                 if (v.get("video") or {}).get("uuid") == uuid or v.get("uuid") == uuid), None)
     if not item:
-        log.info("kick: VOD %s not in channel list", uuid)
+        log.info("kick: VOD %s no longer in the channel's list (deleted?)", uuid)
         return []
-    start = _ts(item.get("start_time") or item.get("created_at"))
+    stream_id = str(item.get("id"))
     dur = item.get("duration") or 0
     dur = dur / 1000 if dur > 86400 else dur
-    if not start or not dur:
-        return []
-    end = start + dur
-    out, cursor = [], None
-    for _ in range(10):  # newest first; stop once we're before the stream
+    ca = item.get("created_at") or ""
+    start = _ts(ca) if ("Z" in ca or "+" in ca) else _ts(item.get("start_time"))
+    oldest_ok = (start or 0) - 86400
+    out, cursor, sample = [], None, None
+    for _ in range(15):  # clips come newest first; stop once we're well before the stream
         q = f"https://kick.com/api/v2/channels/{slug}/clips?sort=date&time=all"
         if cursor:
             q += f"&cursor={cursor}"
         data = _get(q, impersonate="chrome")
-        clips = data.get("clips") or data.get("data") or []
+        clips = data.get("clips") or []
         if not clips:
             break
-        older = False
         for c in clips:
-            made = _ts(c.get("created_at"))
-            if made is None:
+            if str(c.get("livestream_id")) != stream_id:
                 continue
-            if made < start:
-                older = True
-                continue
-            if made > end + 120:
-                continue
+            sample = sample or c.get("vod_starts_at")
+            off = _kick_offset(c, start, dur)
             cdur = float(c.get("duration") or 30)
-            cstart = _ts(c.get("started_at")) or (made - cdur)
-            off = cstart - start
-            if 0 <= off <= dur:
+            if off is not None and 0 <= off <= dur:
                 out.append({"start": off, "end": off + cdur,
                             "views": int(c.get("views") or c.get("view_count") or 0),
                             "title": c.get("title") or ""})
-        cursor = data.get("nextCursor") or data.get("next_cursor")
-        if older or not cursor:
+        last = _ts(clips[-1].get("created_at")) or 0
+        cursor = data.get("nextCursor")
+        if not cursor or (start and last < oldest_ok):
             break
+    if sample is not None:
+        log.info("kick: sample vod_starts_at=%r", sample)
     return out
 
 

@@ -83,6 +83,8 @@ def main():
     elif a.cmd == "process":
         if not a.url:
             sys.exit("usage: python run.py process URL --name 'Streamer'")
+        from clipper import signals
+        a.url = signals.kick_latest(a.url)
         plat = "kick" if "kick.com" in a.url else "twitch" if "twitch.tv" in a.url else "youtube"
         vod = {"key": f"manual:{abs(hash(a.url))}", "platform": plat, "streamer": a.name,
                "title": "manual", "url": a.url}
@@ -90,6 +92,8 @@ def main():
         print("still live - try again after the stream" if res == "live" else "\n".join(res))
     elif a.cmd == "clips":
         from clipper import signals
+        a.url = signals.kick_latest(a.url or "")
+        print("VOD:", a.url)
         plat = "kick" if "kick.com" in (a.url or "") else "twitch"
         hints = signals.viewer_clips({"platform": plat, "url": a.url or ""}, cfg)
         for h in hints[:15]:
