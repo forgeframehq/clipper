@@ -9,7 +9,7 @@ import subprocess
 import sys
 from datetime import datetime
 
-from . import edit, highlights
+from . import edit, highlights, signals
 
 log = logging.getLogger("pipeline")
 PAD = 4  # extra seconds downloaded around each section (cuts land on keyframes)
@@ -93,7 +93,8 @@ def process(vod, cfg, transcribe=True):
         log.info("[%s] downloading audio: %s", vod["streamer"], vod["title"][:70])
         pcm_path = download_audio(urls, work)
         pcm = highlights.load_pcm(pcm_path)
-        moments = highlights.find(pcm, cfg, transcribe=transcribe)
+        hints = signals.viewer_clips(vod, cfg)
+        moments = highlights.find(pcm, cfg, transcribe=transcribe, hints=hints)
         made = []
         for n, m in enumerate(moments, 1):
             base = os.path.join(work, f"sec{n}")

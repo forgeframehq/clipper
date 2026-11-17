@@ -44,23 +44,49 @@ def _moving_avg(x, w):
     return ((c[hi] - c[lo]) / (hi - lo)).astype(np.float32)
 
 
-def candidates(db, hl):
-    before, after = hl["clip_before"], hl["clip_after"]
-    k = hl["clips_per_vod"] * hl.get("candidates_multiplier", 3)
+def excitement(db, hl):
     smooth = _moving_avg(db, 3)
     baseline = _moving_avg(db, 300)
     excite = smooth - baseline
     excite[db < -50] = -99           # ignore silence / BRB screens
-    excite[:before] = -99            # need room for the setup
-    excite[len(excite) - after:] = -99
+    return excite
+
+
+def candidates(excite, hl, k, taken=()):
+    before, after = hl["clip_before"], hl["clip_after"]
+    ex = excite.copy()
+    ex[:before] = -99                # need room for the setup
+    ex[len(ex) - after:] = -99
     picked = []
-    for sec in np.argsort(-excite):
-        if excite[sec] <= 0 or len(picked) >= k:
+    for sec in np.argsort(-ex):
+        if ex[sec] <= 0 or len(picked) >= k:
             break
-        if all(abs(int(sec) - p) >= hl["min_gap"] for p, _ in picked):
-            picked.append((int(sec), float(excite[sec])))
-    return [{"peak": p, "start": float(p - before), "end": float(p + after), "excite": e}
+        sec = int(sec)
+        if any(s - hl["min_gap"] / 2 <= sec <= e + hl["min_gap"] / 2 for s, e in taken):
+            continue
+        if all(abs(sec - p) >= hl["min_gap"] for p, _ in picked):
+            picked.append((sec, float(ex[sec])))
+    return [{"peak": p, "start": float(p - before), "end": float(p + after), "excite": e, "src": "loud"}
             for p, e in picked]
+
+
+def hint_candidates(hints, excite, total, limit=10):
+    """Turn viewer-clip clusters into 25-55 s windows, a little setup before, reaction after."""
+    out = []
+    for h in hints[:limit]:
+        start, end = max(0.0, h["start"] - 8), min(total, h["end"] + 4)
+        if end - start < 25:
+            start = max(0.0, end - 25)
+        if end - start > 55:
+            start = end - 55
+        if end - start < 15:
+            continue
+        seg = excite[int(start):int(end)]
+        out.append({"peak": int(start), "start": float(start), "end": float(end),
+                    "excite": float(seg.max()) if len(seg) else 0.0, "src": "viewers",
+                    "strength": h["strength"], "count": h["count"], "views": h["views"],
+                    "clip_title": h.get("title", "")})
+    return out
 
 
 def section_audio(path, secs=20):
@@ -120,11 +146,15 @@ def hype_score(words, hype_words):
     return min(hits, 6)
 
 
-def find(pcm, cfg, transcribe=True):
+def find(pcm, cfg, transcribe=True, hints=None):
     hl, tcfg = cfg["highlights"], cfg["transcribe"]
     db = loudness_per_second(pcm)
-    cands = candidates(db, hl)
-    log.info("audio %.1f min, %d candidate moments", len(db) / 60, len(cands))
+    excite = excitement(db, hl)
+    hinted = hint_candidates(hints or [], excite, len(db))
+    k = hl["clips_per_vod"] * (2 if hinted else hl.get("candidates_multiplier", 3))
+    cands = hinted + candidates(excite, hl, k, taken=[(c["start"], c["end"]) for c in hinted])
+    log.info("audio %.1f min: %d moments from viewer clips + %d from loudness",
+             len(db) / 60, len(hinted), len(cands) - len(hinted))
     if not cands:
         return []
     ex = np.array([c["excite"] for c in cands])
@@ -140,6 +170,8 @@ def find(pcm, cfg, transcribe=True):
         dur = c["end"] - c["start"]
         wps = len(c["words"]) / dur
         c["score"] = float(zi) + 0.5 * hype_score(c["words"], hl["hype_words"]) + 0.3 * min(wps, 3)
+        if c["src"] == "viewers":    # people chose to clip this - trust it most
+            c["score"] += 3 + c["strength"]
         # trim dead air at the start, keep at least 20 s
         if c["words"]:
             first = c["words"][0]["start"]
@@ -150,4 +182,12 @@ def find(pcm, cfg, transcribe=True):
                     w["start"] -= shift
                     w["end"] -= shift
     best = sorted(cands, key=lambda c: -c["score"])[:hl["clips_per_vod"]]
+    for c in best:
+        log.info("  pick %s @%s score %.2f%s", c["src"], _hms(c["start"]), c["score"],
+                 f" ({c['count']} clips, {c['views']} views)" if c["src"] == "viewers" else "")
     return sorted(best, key=lambda c: c["start"])
+
+
+def _hms(t):
+    t = int(t)
+    return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}"

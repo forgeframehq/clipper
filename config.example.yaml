@@ -38,6 +38,11 @@ highlights:
                "stop", "crazy", "insane", "help", "run", "chat", "dude", "holy",
                "wait", "hell no", "nah", "why", "dead", "clip that", "clip it"]
 
+# Free app from dev.twitch.tv/console - lets the clipper see where viewers clipped Twitch VODs.
+twitch:
+  client_id: ""
+  client_secret: ""
+
 transcribe:
   model: small              # tiny | base | small | medium  (small = best for a 4-core CPU)
   compute_type: int8

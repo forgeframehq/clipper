@@ -5,6 +5,7 @@
   python run.py once                      check all streamers + clip new VODs (what the timer runs)
   python run.py process URL --name Adin   clip one specific VOD/video URL
   python run.py loop --every 30           run "once" forever, every N minutes
+  python run.py clips URL                 show where viewers clipped a VOD (no downloading)
 """
 import argparse
 import fcntl
@@ -59,7 +60,7 @@ def once(cfg, db, no_captions=False):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["check", "once", "process", "loop"])
+    ap.add_argument("cmd", choices=["check", "once", "process", "loop", "clips"])
     ap.add_argument("url", nargs="?")
     ap.add_argument("--name", default="Streamer", help="streamer name for 'process'")
     ap.add_argument("--every", type=int, default=30, help="minutes between runs for 'loop'")
@@ -87,6 +88,15 @@ def main():
                "title": "manual", "url": a.url}
         res = pipeline.process(vod, cfg, transcribe=not a.no_captions)
         print("still live - try again after the stream" if res == "live" else "\n".join(res))
+    elif a.cmd == "clips":
+        from clipper import signals
+        plat = "kick" if "kick.com" in (a.url or "") else "twitch"
+        hints = signals.viewer_clips({"platform": plat, "url": a.url or ""}, cfg)
+        for h in hints[:15]:
+            t = int(h["start"])
+            print(f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}  {h['count']} clips  {h['views']:>7} views  {h['title'][:50]}")
+        if not hints:
+            print("no viewer clips found")
     elif a.cmd == "once":
         once(cfg, db, a.no_captions)
     else:
