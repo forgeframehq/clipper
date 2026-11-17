@@ -171,7 +171,7 @@ def find(pcm, cfg, transcribe=True, hints=None):
         wps = len(c["words"]) / dur
         c["score"] = float(zi) + 0.5 * hype_score(c["words"], hl["hype_words"]) + 0.3 * min(wps, 3)
         if c["src"] == "viewers":    # people chose to clip this - trust it most
-            c["score"] += 3 + c["strength"]
+            c["score"] += 1.2 * c["strength"]  # 1 junk clip ~ +1.2; 10 clips w/ 5k views ~ +17
         # trim dead air at the start, keep at least 20 s
         if c["words"]:
             first = c["words"][0]["start"]
