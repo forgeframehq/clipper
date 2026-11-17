@@ -54,10 +54,12 @@ def _kick_offset(c, start, dur):
     v = c.get("vod_starts_at")
     if isinstance(v, (int, float)) or (isinstance(v, str) and re.fullmatch(r"\d+(\.\d+)?", v)):
         off = float(v)
-        return off / 1000 if off > dur * 5 else off
-    t = _ts(v) if isinstance(v, str) else None
-    if t and t > 0 and start:
-        return t - start
+        if off > 0:  # Kick often leaves this at 0 = unknown
+            return off / 1000 if off > dur * 5 else off
+    else:
+        t = _ts(v) if isinstance(v, str) else None
+        if t and t > 86400 and start:
+            return t - start
     made = _ts(c.get("created_at"))
     if made and start:
         return made - float(c.get("duration") or 30) - start
