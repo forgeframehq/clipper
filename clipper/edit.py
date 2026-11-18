@@ -14,10 +14,14 @@ def _clean(s):
     return s.replace("{", "(").replace("}", ")").replace("\\", "").replace("\n", " ")
 
 
-def write_ass(path, words, duration, ecfg, credit=None):
+TOP_H = 720  # height of the streamer panel in "split" layout
+
+
+def write_ass(path, words, duration, ecfg, credit=None, layout="blur"):
     font, size = ecfg.get("font", "DejaVu Sans"), ecfg.get("font_size", 80)
     per = ecfg.get("caption_words", 3)
-    cap_margin = 420 if ecfg.get("layout", "blur") == "blur" else 480
+    cap_margin = {"blur": 420, "split": H - TOP_H - size // 2}.get(layout, 480)
+    credit_margin = 24 if layout == "split" else 330
     lines = [
         "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {W}", f"PlayResY: {H}", "WrapStyle: 0", "",
         "[V4+ Styles]",
@@ -25,7 +29,7 @@ def write_ass(path, words, duration, ecfg, credit=None):
         " Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline,"
         " Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Cap,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,6,2,2,60,60,{cap_margin},1",
-        f"Style: Credit,{font},{int(size * 0.7)},&H0000E5FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,0,8,40,40,330,1",
+        f"Style: Credit,{font},{int(size * 0.7)},&H0000E5FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,0,8,40,40,{credit_margin},1",
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     if credit:
@@ -51,11 +55,23 @@ def render(src, out, offset, duration, words, ecfg, credit=None):
     """src: downloaded section; offset: where the clip starts inside src (seconds)."""
     work = os.path.dirname(os.path.abspath(out))
     ass_name = os.path.basename(out) + ".ass"
-    write_ass(os.path.join(work, ass_name), words, duration, ecfg, credit if ecfg.get("show_credit", True) else None)
-    if ecfg.get("layout", "blur") == "crop":
+    layout, cam = ecfg.get("layout", "split"), None
+    if layout == "split":
+        from . import facecam
+        cam = facecam.detect(os.path.abspath(src), offset, duration, aspect=W / TOP_H)
+        if not cam:
+            layout = "blur"  # no facecam found: full frame over blurred background
+    write_ass(os.path.join(work, ass_name), words, duration, ecfg,
+              credit if ecfg.get("show_credit", True) else None, layout)
+    if layout == "split":
+        x, y, cw, ch = cam
+        bot = H - TOP_H
+        vf = (f"split[a][b];[a]crop={cw}:{ch}:{x}:{y},scale={W}:{TOP_H}:force_original_aspect_ratio=increase,"
+              f"crop={W}:{TOP_H}[top];[b]scale=-2:{bot},crop={W}:{bot}[bot];[top][bot]vstack,ass={ass_name}")
+    elif layout == "crop":
         vf = f"scale=-2:{H},crop={W}:{H},ass={ass_name}"
     else:
-        zoom = float(ecfg.get("zoom", 1.35))
+        zoom = float(ecfg.get("zoom", 1.0))
         fw = int(W * zoom) // 2 * 2
         vf = (f"split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
               f"boxblur=20:3,eq=brightness=-0.08[bg];[b]scale={fw}:-2,crop={W}:ih[fg];"

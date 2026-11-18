@@ -32,6 +32,7 @@ highlights:
   clips_per_vod: 5
   clip_before: 25           # seconds kept before the loudest moment (the setup)
   clip_after: 15            # seconds kept after it (the reaction)
+  end_slack: 12             # may run up to this many seconds longer to finish the sentence
   min_gap: 90               # seconds between two clips from the same VOD
   candidates_multiplier: 3  # transcribe 3x more candidates than we keep, then pick the best
   hype_words: ["no way", "oh my god", "omg", "bro", "what", "let's go", "lets go", "yo",
@@ -50,8 +51,9 @@ transcribe:
   language: en
 
 edit:
-  layout: blur              # blur = full frame over blurred background | crop = centre crop
-  zoom: 1.35                # how much to zoom the gameplay in "blur" layout
+  layout: split             # split = streamer on top, gameplay below (falls back to blur if no facecam found)
+                            # blur = full frame over blurred background | crop = centre crop
+  zoom: 1.0                 # 1.0 = full width, nothing cut off the sides; 1.35 = bigger but crops the edges
   caption_words: 3          # words per caption on screen
   font: DejaVu Sans
   font_size: 80

@@ -29,6 +29,15 @@ run.py check|once|process URL|clips URL|loop
 - A 13h Kai Cenat VOD took ~1h end to end. max_duration_min (default 360) skips marathons.
 - First test (Kai Cenat, loudness only): clips were "meh", captions out of sync. The sync bug is now fixed (section alignment) and viewer-clip hints were added. Both still need to be validated on a real run.
 
+## Update 18 Nov
+- Kick downloads: yt-dlp's Kick extractor is broken; pipeline resolves the HLS URL from Kick's API (fixed on the server).
+- New `edit.layout: split` (default): streamer facecam on top (720 px), gameplay below. facecam.py finds the face with
+  OpenCV Haar (needs `opencv-python-headless<5`; v5 dropped CascadeClassifier). Falls back to blur if no steady face.
+  Face detection is NOT yet validated on real footage. Check the log line `facecam at ...` and a frame of the output.
+- Clips now end at a sentence end/pause (highlights.snap_end, up to `end_slack` 12 s longer) instead of mid-sentence.
+- blur zoom default is now 1.0 (1.35 cut off the sides, including the facecam).
+- Sudhi's feedback: N3on slots clips were cut off; wants streamer-up / gameplay-down. Avoid gambling/slots streams.
+
 ## Next up
 - Validate viewer-clip picks + caption sync on a Kick VOD (N3on: `python run.py process https://kick.com/n3on --name N3on`).
 - Auto-posting: plan is a spare Pixel 7 Pro (cracked screen) running Termux + uiautomator2 that pulls approved

@@ -139,6 +139,24 @@ def transcribe_window(pcm, start, end, tcfg):
     return words
 
 
+def snap_end(words, start, end, tail_end):
+    """Don't cut mid-sentence: move the end to the next sentence end or pause in speech.
+    Looks from 3 s before the planned end up to tail_end. Word times are relative to start."""
+    planned = end - start
+    for i, w in enumerate(words):
+        if w["end"] < planned - 3:
+            continue
+        if w["start"] > planned + 1:
+            break                          # nobody was mid-sentence at the planned end
+        nxt = words[i + 1] if i + 1 < len(words) else None
+        pause = nxt is None or nxt["start"] - w["end"] > 0.7
+        if pause or w["word"][-1:] in ".?!":
+            cut = min(w["end"] + 0.6, tail_end - start)
+            return start + cut, [x for x in words if x["end"] <= cut]
+    cut = min(planned, tail_end - start)   # nobody talking near the end: keep the planned cut
+    return start + cut, [x for x in words if x["end"] <= cut]
+
+
 def hype_score(words, hype_words):
     text = " " + " ".join(w["word"] for w in words).lower() + " "
     text = re.sub(r"[^a-z' ]", " ", text)
@@ -163,7 +181,10 @@ def find(pcm, cfg, transcribe=True, hints=None):
         c["words"] = []
         if transcribe:
             try:
-                c["words"] = transcribe_window(pcm, c["start"], c["end"], tcfg)
+                slack = hl.get("end_slack", 12)
+                tail_end = min(len(db), c["end"] + slack)
+                words = transcribe_window(pcm, c["start"], tail_end, tcfg)
+                c["end"], c["words"] = snap_end(words, c["start"], c["end"], tail_end)
             except Exception as e:
                 log.warning("transcription failed (%s); clipping without captions", e)
                 transcribe = False
